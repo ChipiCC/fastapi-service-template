@@ -28,6 +28,8 @@ repos:
           - sqlalchemy>=2.0
           - fastapi>=0.115
           - structlog>=24.4
+          - httpx>=0.28
+          - pytest>=8.3
         args: [--config-file=pyproject.toml]
         files: ^(src|tests)/
         pass_filenames: false
