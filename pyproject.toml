@@ -14,6 +14,7 @@ dependencies = [
     "asyncpg>=0.30.0",
     "alembic>=1.14.0",
     "structlog>=24.4.0",
+    "prometheus-client>=0.26.0",
 ]
 
 [dependency-groups]
@@ -25,6 +26,7 @@ dev = [
     "pytest-cov>=6.0.0",
     "httpx>=0.28.1",
     "pre-commit>=4.0.1",
+    "pip-audit>=2.10.1",
 ]
 
 [build-system]
@@ -130,6 +132,7 @@ source = ["app", "core", "db", "internal", "items"]
 concurrency = ["greenlet", "thread"]
 
 [tool.coverage.report]
+fail_under = 90
 exclude_lines = [
     "pragma: no cover",
     "if TYPE_CHECKING:",
