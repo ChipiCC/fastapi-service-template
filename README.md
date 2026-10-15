@@ -4,6 +4,7 @@ A production-ready template for building FastAPI microservices.
 
 - **Runtime:** Python 3.15, FastAPI, Uvicorn
 - **Data:** native SQL over async SQLAlchemy Core + asyncpg, Alembic raw-SQL migrations, PostgreSQL with native `uuid` keys (no ORM)
+- **Architecture:** layered `domain → service → repository → db`, with a generic `BaseRepository` CRUD contract
 - **Config:** `pydantic-settings` (12-factor, `.env` support)
 - **Observability:** structured JSON logging via `structlog`, request IDs
 - **Quality:** Ruff (lint + format), mypy (strict), pytest + coverage
@@ -17,7 +18,7 @@ A production-ready template for building FastAPI microservices.
 ├── src/
 │   ├── app.py               # app factory + ASGI entrypoint
 │   ├── core/                # config, logging, errors, middleware, pagination
-│   ├── db/                  # async engine, session (SQLAlchemy Core only)
+│   ├── db/                  # async engine + session, and the BaseRepository contract
 │   ├── internal/            # internal domain: metadata + health probes
 │   │   ├── router.py
 │   │   ├── handlers/
@@ -25,7 +26,8 @@ A production-ready template for building FastAPI microservices.
 │   └── items/               # example domain
 │       ├── router.py        # wires paths to handlers
 │       ├── handlers/        # one module per endpoint
-│       ├── service.py       # business logic + native SQL (owns transactions)
+│       ├── service.py       # business logic (thin layer over the repository)
+│       ├── repository.py    # ItemRepository: native SQL + transactions
 │       ├── models/          # Pydantic request/response models
 │       └── dependencies.py
 ├── migrations/              # Alembic environment + raw-SQL versions
@@ -34,9 +36,10 @@ A production-ready template for building FastAPI microservices.
 └── pyproject.toml           # deps + tool config
 ```
 
-**Layering rule:** `domain → service → db`. Each domain lives in its own
-`src/<domain>/` package: the router/handlers stay thin, the service owns
-transaction boundaries and contains all hand-written SQL, and rows are mapped
+**Layering rule:** `domain → service → repository → db`. Each domain lives in
+its own `src/<domain>/` package: the router/handlers stay thin, the service
+holds business logic and delegates persistence to a repository, and the
+repository owns the hand-written SQL and its transactions. Rows are mapped
 straight into Pydantic models. There is **no ORM** — see `AGENTS.md` for the
 native-SQL conventions.
 
@@ -87,6 +90,11 @@ mise run test
 The connection is taken from `TEST_DATABASE_URL` (default
 `postgresql+asyncpg://postgres:postgres@localhost:5432/app_test`). The schema is
 built by applying the Alembic migrations, so the suite also validates them.
+
+Repositories are exercised through an `item_repository` fixture that is
+parametrized over **both** the Postgres `ItemRepository` and an in-memory test
+double, so a single CRUD suite holds the two implementations to the same
+behaviour.
 
 ## Configuration
 
