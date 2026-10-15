@@ -4,21 +4,42 @@ A production-ready template for building FastAPI microservices.
 
 - **Runtime:** Python 3.15, FastAPI, Uvicorn
 - **Data:** native SQL over async SQLAlchemy Core + asyncpg, Alembic raw-SQL migrations, PostgreSQL with native `uuid` keys (no ORM)
-- **Architecture:** layered `domain → service → repository → db`, with a generic `BaseRepository` CRUD contract
-- **Config:** `pydantic-settings` (12-factor, `.env` support)
-- **Observability:** structured JSON logging via `structlog`, request IDs
-- **Quality:** Ruff (lint + format), mypy (strict), pytest + coverage
-- **Ops:** Dockerfile (multi-stage, non-root), Docker Compose, GitHub Actions CI
+- **Architecture:** layered `domain → service → repository → db`, with a generic `BaseRepository` CRUD contract and a request-scoped unit of work
+- **Config:** `pydantic-settings` (12-factor, `.env` support, production guards)
+- **Security:** opt-in API-key auth, CORS, security headers, trusted hosts, in-process rate limiting
+- **Observability:** structured JSON logging, request IDs + access logs, Prometheus metrics
+- **Quality:** Ruff (lint + format), mypy (strict), pytest + coverage gate
+- **Ops:** Dockerfile (multi-stage, non-root), Docker Compose, GitHub Actions CI, Dependabot
 - **Tooling:** [uv](https://docs.astral.sh/uv/) for deps, [mise](https://mise.jdx.dev/) for tool versions & tasks
+
+## Documentation
+
+Full documentation lives in [`docs/`](docs/README.md), split by topic:
+
+| Topic | Description |
+| --- | --- |
+| [Architecture](docs/architecture.md) | Layering, request path, and the no-ORM policy |
+| [Configuration](docs/configuration.md) | Every setting, secrets, and production validation |
+| [Authentication](docs/authentication.md) | Opt-in API-key auth and swapping in JWT/OAuth |
+| [CORS](docs/cors.md) | Browser cross-origin setup |
+| [Security](docs/security.md) | Headers, trusted hosts, rate limiting, checklist |
+| [Metrics](docs/metrics.md) | Prometheus instrumentation and `/metrics` |
+| [Observability](docs/observability.md) | Logging, request IDs, access logs, tracing (roadmap) |
+| [Database](docs/database.md) | Native SQL, the unit-of-work, pooling, migrations |
+| [Testing](docs/testing.md) | Fixtures, contract tests, coverage |
+| [Operations](docs/operations.md) | Docker, migrations, health probes, shutdown |
+| [Dependencies](docs/dependencies.md) | Dependabot updates and patch auto-merge |
+| [Roadmap](docs/roadmap.md) | Deliberately out-of-scope items |
 
 ## Project layout
 
 ```
 .
 ├── src/
-│   ├── app.py               # app factory + ASGI entrypoint
-│   ├── core/                # config, logging, errors, middleware, pagination, BaseRepository
-│   ├── db/                  # concrete persistence infra: async engine + session
+│   ├── app.py               # app factory + ASGI entrypoint (middleware, routers)
+│   ├── core/                # config, logging, errors, middleware, security,
+│   │                        # pagination, metrics, BaseRepository
+│   ├── db/                  # async engine + session (unit of work)
 │   ├── internal/            # internal domain: metadata + health probes
 │   │   ├── router.py
 │   │   ├── handlers/
@@ -27,11 +48,12 @@ A production-ready template for building FastAPI microservices.
 │       ├── router.py        # wires paths to handlers
 │       ├── handlers/        # one module per endpoint
 │       ├── service.py       # business logic (thin layer over the repository)
-│       ├── repository.py    # ItemRepository: native SQL + transactions
+│       ├── repository.py    # ItemRepository: native SQL
 │       ├── models/          # Pydantic request/response models
 │       └── dependencies.py
 ├── migrations/              # Alembic environment + raw-SQL versions
 ├── tests/                   # pytest suite (mirrors the domain layout)
+├── docs/                    # documentation (see above)
 ├── Dockerfile / compose.yaml
 └── pyproject.toml           # deps + tool config
 ```
@@ -39,9 +61,9 @@ A production-ready template for building FastAPI microservices.
 **Layering rule:** `domain → service → repository → db`. Each domain lives in
 its own `src/<domain>/` package: the router/handlers stay thin, the service
 holds business logic and delegates persistence to a repository, and the
-repository owns the hand-written SQL and its transactions. Rows are mapped
-straight into Pydantic models. There is **no ORM** — see `AGENTS.md` for the
-native-SQL conventions.
+repository owns the hand-written SQL. The session dependency owns the
+transaction. Rows are mapped straight into Pydantic models. There is **no ORM** —
+see [`docs/database.md`](docs/database.md) and [`AGENTS.md`](AGENTS.md).
 
 ## Getting started
 
@@ -90,26 +112,7 @@ mise run test
 The connection is taken from `TEST_DATABASE_URL` (default
 `postgresql+asyncpg://postgres:postgres@localhost:5432/app_test`). The schema is
 built by applying the Alembic migrations, so the suite also validates them.
-
-Repositories are exercised through an `item_repository` fixture that is
-parametrized over **both** the Postgres `ItemRepository` and an in-memory test
-double, so a single CRUD suite holds the two implementations to the same
-behaviour.
-
-## Configuration
-
-All settings live in `src/core/config.py` and are read from environment
-variables. See `.env.example` for the full list. Key variables:
-
-| Variable | Default | Description |
-| --- | --- | --- |
-| `ENVIRONMENT` | `local` | `local`, `staging`, or `production` |
-| `DEBUG` | `false` | Enables SQL echo and debug mode |
-| `LOG_LEVEL` | `INFO` | Root log level |
-| `LOG_JSON` | `true` | JSON logs (`false` for pretty console) |
-| `POSTGRES_HOST` | `localhost` | Database host |
-| `POSTGRES_PORT` | `5432` | Database port |
-| `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` | `postgres`/`postgres`/`app` | Credentials |
+Coverage is enforced at 90%. See [`docs/testing.md`](docs/testing.md).
 
 ## Endpoints
 
@@ -117,11 +120,22 @@ variables. See `.env.example` for the full list. Key variables:
 | --- | --- | --- |
 | GET | `/` | Service metadata |
 | GET | `/health/live` | Liveness probe |
-| GET | `/health/ready` | Readiness probe (checks DB) |
+| GET | `/health/ready` | Readiness probe (checks DB, `503` when down) |
+| GET | `/metrics` | Prometheus metrics (when enabled) |
 | GET/POST | `/api/v1/items` | List / create items |
 | GET/PATCH/DELETE | `/api/v1/items/{id}` | Read / update / delete an item |
 | GET | `/docs`, `/redoc`, `/openapi.json` | API docs |
 
+Protected routes accept the `X-API-Key` header when `API_KEYS` is configured —
+see [`docs/authentication.md`](docs/authentication.md).
+
+## Configuration
+
+All settings live in `src/core/config.py` and are read from environment
+variables. See [`.env.example`](.env.example) for the full list and
+[`docs/configuration.md`](docs/configuration.md) for reference. The app refuses
+to start with insecure defaults when `ENVIRONMENT=production`.
+
 ## License
 
-MIT
+MIT — see [LICENSE](LICENSE).
