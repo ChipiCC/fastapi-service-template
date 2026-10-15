@@ -11,7 +11,7 @@ from collections.abc import AsyncIterator
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from db.repository import BaseRepository
+from core.repository import BaseRepository
 from items.models.item import ItemCreate, ItemRead, ItemUpdate
 from items.repository import ItemRepository
 from tests.helpers.repositories import InMemoryItemRepository

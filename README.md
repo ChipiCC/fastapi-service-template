@@ -17,8 +17,8 @@ A production-ready template for building FastAPI microservices.
 .
 ├── src/
 │   ├── app.py               # app factory + ASGI entrypoint
-│   ├── core/                # config, logging, errors, middleware, pagination
-│   ├── db/                  # async engine + session, and the BaseRepository contract
+│   ├── core/                # config, logging, errors, middleware, pagination, BaseRepository
+│   ├── db/                  # concrete persistence infra: async engine + session
 │   ├── internal/            # internal domain: metadata + health probes
 │   │   ├── router.py
 │   │   ├── handlers/

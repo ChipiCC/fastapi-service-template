@@ -1,7 +1,7 @@
 """Repository test doubles.
 
 ``InMemoryItemRepository`` implements the same
-:class:`~db.repository.BaseRepository` contract as the Postgres
+:class:`~core.repository.BaseRepository` contract as the Postgres
 ``ItemRepository`` but stores entities in a dict. It lets the CRUD suite run
 against a second backend and mirrors the Postgres behaviour that tests rely on:
 id/timestamp generation, ``created_at DESC`` ordering, and ``NotFoundError`` on
@@ -14,7 +14,7 @@ import uuid
 from datetime import UTC, datetime, timedelta
 
 from core.exceptions import NotFoundError
-from db.repository import BaseRepository
+from core.repository import BaseRepository
 from items.models.item import ItemCreate, ItemRead, ItemUpdate
 
 

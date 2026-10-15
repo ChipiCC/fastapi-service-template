@@ -12,7 +12,7 @@ import uuid
 import pytest
 
 from core.exceptions import NotFoundError
-from db.repository import BaseRepository
+from core.repository import BaseRepository
 from items.models import ItemCreate, ItemRead, ItemUpdate
 
 

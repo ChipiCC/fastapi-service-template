@@ -65,9 +65,11 @@ package. Imports are absolute from the top level (`core.config`, `db.session`,
   (`app`). Wires middleware, exception handlers, and the domain routers.
 - `src/core/` — cross-cutting: `config.py` (settings), `logging.py`,
   `exceptions.py` (+ handlers), `middleware.py`, `pagination.py`
-  (`Page[T]`, `PaginationDep`), `version.py`.
-- `src/db/` — async `engine`, `SessionFactory`, `get_session` + `SessionDep`,
-  and the generic `BaseRepository` CRUD contract.
+  (`Page[T]`, `PaginationDep`), `repository.py` (`BaseRepository`), `version.py`.
+- `src/db/` — concrete persistence infrastructure: async `engine`,
+  `SessionFactory`, `get_session` + `SessionDep`. The `BaseRepository` contract
+  lives in `core` because it is backend-agnostic (an in-memory fake implements
+  it with no database).
 - `src/<domain>/` — one self-contained package per domain (`items/`,
   `internal/`).
 
@@ -88,7 +90,7 @@ src/items/
 - `service.py` — business logic only. It delegates persistence to a repository
   and must not touch the session or write SQL.
 - `repository.py` — the data-access layer. Subclasses `BaseRepository` (from
-  `db/repository.py`), holds all the hand-written SQL, and owns transaction
+  `core/repository.py`), holds all the hand-written SQL, and owns transaction
   boundaries (`commit`).
 - `models/` — Pydantic request/response models. Queries return rows that are
   validated straight into `*Read` models.

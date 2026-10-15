@@ -13,7 +13,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.exceptions import NotFoundError
-from db.repository import BaseRepository
+from core.repository import BaseRepository
 from items.models.item import ItemCreate, ItemRead, ItemUpdate
 
 # Columns returned to the API
