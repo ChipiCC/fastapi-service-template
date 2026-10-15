@@ -53,8 +53,8 @@ raw-SQL migration exists for any schema change.
 ## Architecture & layering
 
 ```
-domain (router → handlers)  →  service  →  db (engine, session, native SQL)
-                 ↘ models (Pydantic) ↗
+domain (router → handlers)  →  service  →  repository  →  db (engine, session)
+                    ↘ models (Pydantic) ↗
 ```
 
 The source root is `src/` and it is a **flat namespace** — there is no `app/`
@@ -66,7 +66,8 @@ package. Imports are absolute from the top level (`core.config`, `db.session`,
 - `src/core/` — cross-cutting: `config.py` (settings), `logging.py`,
   `exceptions.py` (+ handlers), `middleware.py`, `pagination.py`
   (`Page[T]`, `PaginationDep`), `version.py`.
-- `src/db/` — async `engine`, `SessionFactory`, `get_session` + `SessionDep`.
+- `src/db/` — async `engine`, `SessionFactory`, `get_session` + `SessionDep`,
+  and the generic `BaseRepository` CRUD contract.
 - `src/<domain>/` — one self-contained package per domain (`items/`,
   `internal/`).
 
@@ -76,22 +77,26 @@ A domain is a package with a fixed shape:
 src/items/
 ├── router.py         # APIRouter: wires paths to handlers (no logic)
 ├── handlers/         # one module per endpoint (create.py, list.py, ...)
-├── service.py        # business logic + all native SQL (owns transactions)
+├── service.py        # business logic; delegates persistence to the repository
+├── repository.py     # data access: native SQL, owns transactions
 ├── models/           # Pydantic request/response models
 └── dependencies.py   # domain DI aliases (e.g. ItemServiceDep)
 ```
 
 - `router.py` + `handlers/` are the HTTP layer only. Parse/validate input, call
   a service, return a model. **No business logic, no SQL.**
-- `service.py` — business logic **and** all database access. It owns transaction
-  boundaries (`commit`) and holds the raw SQL.
+- `service.py` — business logic only. It delegates persistence to a repository
+  and must not touch the session or write SQL.
+- `repository.py` — the data-access layer. Subclasses `BaseRepository` (from
+  `db/repository.py`), holds all the hand-written SQL, and owns transaction
+  boundaries (`commit`).
 - `models/` — Pydantic request/response models. Queries return rows that are
   validated straight into `*Read` models.
 - `internal/` is the non-domain domain: service metadata and health probes,
   mounted at the root (`/`, `/health/*`) outside the versioned API prefix.
 
 There is **no ORM models package** — the schema lives in Alembic migrations and
-the queries live in services.
+the queries live in repositories.
 
 ### Adding a new domain
 
@@ -99,16 +104,20 @@ the queries live in services.
    as raw SQL in `upgrade()` (and the inverse in `downgrade()`).
 2. `src/<domain>/models/<name>.py` — `XCreate`, `XUpdate`, `XRead` (mirror the
    columns); re-export from `models/__init__.py`.
-3. `src/<domain>/service.py` — a `<Name>Service` taking `AsyncSession`, with the
-   SQL as module-level `text(...)` constants.
-4. `src/<domain>/handlers/<endpoint>.py` — one module per endpoint; re-export
+3. `src/<domain>/repository.py` — a `<Name>Repository(BaseRepository[...])`
+   taking `AsyncSession`, with the SQL as module-level `text(...)` constants;
+   the write methods commit.
+4. `src/<domain>/service.py` — a `<Name>Service` taking the repository;
+   business logic only.
+5. `src/<domain>/handlers/<endpoint>.py` — one module per endpoint; re-export
    from `handlers/__init__.py`.
-5. `src/<domain>/router.py` — `APIRouter(prefix="/<names>", tags=[...])` wiring
+6. `src/<domain>/router.py` — `APIRouter(prefix="/<names>", tags=[...])` wiring
    each handler with `add_api_route`.
-6. `src/<domain>/dependencies.py` — the service dependency alias.
-7. Register the router in `src/app.py` (pass `prefix=settings.api_v1_prefix` for
+7. `src/<domain>/dependencies.py` — the repository and service dependency
+   aliases.
+8. Register the router in `src/app.py` (pass `prefix=settings.api_v1_prefix` for
    public domains; mount internal domains at the root).
-8. Write tests under `tests/<domain>/`, then run `mise run check`. The test
+9. Write tests under `tests/<domain>/`, then run `mise run check`. The test
    schema is built from the migrations automatically — there is no separate DDL
    to keep in sync.
 
@@ -122,13 +131,13 @@ the queries live in services.
 
 - **Always parameterize.** Use bind parameters (`:name`) for every value. Never
   interpolate user input into a SQL string. The only thing built dynamically is
-  a set of **column names from a fixed whitelist** (see `ItemService.update`),
+  a set of **column names from a fixed whitelist** (see `ItemRepository.update`),
   which is safe and marked with `# noqa: S608`.
 - **Keep SQL as module-level constants.** Define statements once at the top of
-  the service module (`_GET_ITEM`, `_INSERT_ITEM`, …) and reuse them. Do not
+  the repository module (`_GET_ITEM`, `_INSERT_ITEM`, …) and reuse them. Do not
   build SQL inline inside request handlers.
 - **Return rows, map to schemas.** Use `result.mappings()` and
-  `Schema.model_validate(dict(row))`. Services return Pydantic schemas, not
+  `Schema.model_validate(dict(row))`. Repositories return Pydantic schemas, not
   dicts and not ORM objects.
 - **Use `RETURNING`.** `INSERT`/`UPDATE`/`DELETE … RETURNING` fetch the affected
   row in one round-trip and let you detect "not found" without a second query.
@@ -140,7 +149,7 @@ the queries live in services.
   them); never stringify them. Let the database generate the id and read it
   back with `RETURNING`.
 - **Transactions.** Call `await session.commit()` once per write, at the end of
-  the service method. `get_session` rolls back automatically if a service
+  the repository method. `get_session` rolls back automatically if a service
   raises, so do not roll back manually.
 - **Errors.** Raise `NotFoundError` / `ConflictError` / `AppError` from
   `core/exceptions.py`. Do not return error dicts.
@@ -160,12 +169,12 @@ async def get(self, item_id: uuid.UUID) -> ItemRead:
 
 ## Conventions
 
-- **Async everywhere.** All endpoint/service/DB code is `async def`. The DB
-  session comes from `get_session` (an `AsyncSession`).
+- **Async everywhere.** All endpoint/service/repository/DB code is `async def`.
+  The DB session comes from `get_session` (an `AsyncSession`).
 - **Dependency injection.** Shared aliases live next to what they wrap:
   `SessionDep` in `db/session.py`, `PaginationDep` in `core/pagination.py`, and
-  domain aliases in `<domain>/dependencies.py` (e.g. `ItemServiceDep`). Prefer
-  adding a new alias over repeating `Depends(...)`.
+  domain aliases in `<domain>/dependencies.py` (e.g. `ItemRepositoryDep`,
+  `ItemServiceDep`). Prefer adding a new alias over repeating `Depends(...)`.
 - **Type hints are mandatory.** mypy runs in strict mode. New public functions
   need fully-annotated signatures; avoid `Any` and untyped decorators.
 - **Pagination.** Use `limit`/`offset` via `PaginationDep` and return `Page[T]`,
@@ -195,6 +204,11 @@ async def get(self, item_id: uuid.UUID) -> ItemRead:
   no separate test schema to maintain.
 - Fixtures: `database_url` (session-scoped, migrated DB), `engine`, `session`
   (truncates `items` for isolation), `client` (httpx ASGI client).
+- Repository contract tests live in `tests/items/conftest.py` as an
+  `item_repository` fixture parametrized over **both** the Postgres
+  `ItemRepository` and the in-memory double in `tests/helpers/repositories.py`.
+  Add new repository implementations (or fakes) to that parameter list rather
+  than duplicating the CRUD suite.
 - `pytest-asyncio` is in `auto` mode — just write `async def test_...`.
 - The DB dependency is overridden per test, so the app's own engine is unused.
 - Cover the happy path **and** error paths (404, 422, validation).
@@ -232,7 +246,8 @@ async def get(self, item_id: uuid.UUID) -> ItemRead:
 - Do not interpolate values into SQL strings — bind them.
 - Do not edit `.venv/`, `uv.lock` by hand, or generated files in
   `__pycache__`/caches. Regenerate with `uv lock`.
-- Do not bypass the service layer from a handler.
+- Do not bypass the service layer from a handler (and do not let a service
+  reach for the session — it goes through its repository).
 - Do not add dependencies without updating `uv.lock` (`uv add <pkg>`).
 - Do not weaken mypy/Ruff config to make code pass; fix the code.
 - Do not add narration comments (e.g. `# increment counter`) or restate what the
