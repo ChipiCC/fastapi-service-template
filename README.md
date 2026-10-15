@@ -2,7 +2,7 @@
 
 A production-ready template for building FastAPI microservices.
 
-- **Runtime:** Python 3.12, FastAPI, Uvicorn
+- **Runtime:** Python 3.15, FastAPI, Uvicorn
 - **Data:** native SQL over async SQLAlchemy Core + asyncpg, Alembic raw-SQL migrations, PostgreSQL with native `uuid` keys (no ORM)
 - **Config:** `pydantic-settings` (12-factor, `.env` support)
 - **Observability:** structured JSON logging via `structlog`, request IDs
@@ -43,7 +43,7 @@ native-SQL conventions.
 ## Getting started
 
 ```bash
-mise install        # install Python 3.12 + uv
+mise install        # install Python 3.15 + uv
 mise run sync       # create .venv and install dependencies
 cp .env.example .env
 mise run db:up      # start Postgres (Docker Compose)

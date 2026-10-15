@@ -10,7 +10,7 @@ A **production-ready FastAPI microservice template**. It ships an example
 service → native SQL → Postgres). Generic names (`Item`) are intentional so they
 can be renamed for a real domain.
 
-Tech stack: Python 3.12, FastAPI, **native SQL over async SQLAlchemy Core +
+Tech stack: Python 3.15, FastAPI, **native SQL over async SQLAlchemy Core +
 asyncpg**, Alembic (raw-SQL migrations), Pydantic v2 / pydantic-settings,
 structlog, Ruff, mypy, pytest, uv, mise.
 
@@ -22,7 +22,7 @@ structlog, Ruff, mypy, pytest, uv, mise.
 ## Setup
 
 ```bash
-mise install        # provisions Python 3.12 + uv
+mise install        # provisions Python 3.15 + uv
 mise run sync       # creates .venv and installs all dependency groups
 cp .env.example .env
 ```
@@ -242,5 +242,5 @@ async def get(self, item_id: uuid.UUID) -> ItemRead:
 
 - Source root: `src/` — a flat namespace, so `import app`, `import core`, … work
   from the repo root. Packaging is configured via `hatchling`.
-- Python ≥ 3.12. Tool versions pinned in `mise.toml`.
+- Python ≥ 3.15. Tool versions pinned in `mise.toml`.
 - Tests set `pythonpath = ["src"]`.

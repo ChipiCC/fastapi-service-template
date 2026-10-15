@@ -3,7 +3,7 @@ name = "fastapi-service-template"
 dynamic = ["version"]
 description = "Production-ready FastAPI microservice template"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.15"
 license = { text = "MIT" }
 authors = [{ name = "Your Name", email = "you@example.com" }]
 dependencies = [
@@ -46,7 +46,7 @@ package = true
 # ---------------------------------------------------------------------------
 [tool.ruff]
 line-length = 100
-target-version = "py312"
+target-version = "py315"
 src = ["src", "tests"]
 extend-exclude = ["migrations/versions"]
 
@@ -84,7 +84,7 @@ quote-style = "double"
 # mypy
 # ---------------------------------------------------------------------------
 [tool.mypy]
-python_version = "3.12"
+python_version = "3.15"
 strict = true
 warn_unreachable = true
 pretty = true

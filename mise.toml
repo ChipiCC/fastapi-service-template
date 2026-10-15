@@ -2,7 +2,7 @@
 # Run `mise install` once, then `mise tasks` to see everything.
 
 [tools]
-python = "3.12"
+python = "3.15"
 uv = "latest"
 
 [env]
