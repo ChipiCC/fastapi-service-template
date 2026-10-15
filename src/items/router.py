@@ -6,13 +6,18 @@ wires routes and response metadata.
 
 from __future__ import annotations
 
-from fastapi import APIRouter, status
+from fastapi import APIRouter, Depends, status
 
 from core.pagination import Page
+from core.security import require_api_key
 from items import handlers
 from items.models import ItemRead
 
-router = APIRouter(prefix="/items", tags=["items"])
+router = APIRouter(
+    prefix="/items",
+    tags=["items"],
+    dependencies=[Depends(require_api_key)],
+)
 
 router.add_api_route(
     "",

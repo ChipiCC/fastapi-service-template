@@ -64,8 +64,10 @@ package. Imports are absolute from the top level (`core.config`, `db.session`,
 - `src/app.py` — the application factory (`create_app`) and ASGI entrypoint
   (`app`). Wires middleware, exception handlers, and the domain routers.
 - `src/core/` — cross-cutting: `config.py` (settings), `logging.py`,
-  `exceptions.py` (+ handlers), `middleware.py`, `pagination.py`
-  (`Page[T]`, `PaginationDep`), `repository.py` (`BaseRepository`), `version.py`.
+  `exceptions.py` (+ handlers), `middleware.py` (request context/access log,
+  security headers, rate limiting), `security.py` (API-key auth), `metrics.py`
+  (Prometheus), `pagination.py` (`Page[T]`, `PaginationDep`), `repository.py`
+  (`BaseRepository`), `version.py`.
 - `src/db/` — concrete persistence infrastructure: async `engine`,
   `SessionFactory`, `get_session` + `SessionDep`. The `BaseRepository` contract
   lives in `core` because it is backend-agnostic (an in-memory fake implements
@@ -144,16 +146,22 @@ the queries live in repositories.
 - **Use `RETURNING`.** `INSERT`/`UPDATE`/`DELETE … RETURNING` fetch the affected
   row in one round-trip and let you detect "not found" without a second query.
 - **Timestamps come from the database.** Columns default to
-  `CURRENT_TIMESTAMP`; set `updated_at = CURRENT_TIMESTAMP` on updates. Do not
-  generate timestamps in Python.
+  `CURRENT_TIMESTAMP`; set `updated_at` on updates. Do not generate timestamps
+  in Python. Because a request runs in one transaction, prefer
+  `clock_timestamp()` where rows written in the same request must be ordered
+  (see `ItemRepository`).
 - **Native UUID keys.** Primary keys are PostgreSQL `uuid` columns defaulted
   with `gen_random_uuid()`. Bind `uuid.UUID` values directly (asyncpg encodes
   them); never stringify them. Let the database generate the id and read it
   back with `RETURNING`.
-- **Transactions.** Call `await session.commit()` once per write, at the end of
-  the repository method. `get_session` rolls back automatically if a service
-  raises, so do not roll back manually.
-- **Errors.** Raise `NotFoundError` / `ConflictError` / `AppError` from
+- **Transactions are owned by the session, not the repository.**
+  `get_session` (in `db/session.py`) is a unit of work: it commits once when the
+  request succeeds and rolls back if anything raises. Repository methods must
+  **not** call `commit()` (or `rollback()`); they just execute statements. This
+  keeps multi-step service operations atomic. See `docs/database.md`.
+- **Errors.** Raise `NotFoundError` / `ConflictError` / `AppError` (and friends:
+  `BadRequestError`, `UnauthorizedError`, `ForbiddenError`,
+  `TooManyRequestsError`, `ServiceUnavailableError`) from
   `core/exceptions.py`. Do not return error dicts.
 
 ### Example
@@ -187,6 +195,13 @@ async def get(self, item_id: uuid.UUID) -> ItemRead:
   Absolute imports rooted at the top-level package (`core.`, `db.`, `items.`, …)
   or the `app` module.
 - **No `print`.** Use `get_logger(__name__)` (structlog). Ruff bans `T20`.
+- **Cross-cutting HTTP concerns live in `core/`.** Auth, CORS, security headers,
+  rate limiting, and metrics are wired once in `app.py` / `core/middleware.py`.
+  Protect a public router with `dependencies=[Depends(require_api_key)]` rather
+  than hand-rolling checks in handlers.
+- **Document changes.** User-facing docs live in `docs/` (one page per topic,
+  indexed by `docs/README.md`). Add new settings to `.env.example` and the table
+  in `docs/configuration.md`.
 - **Minimal comments.** Write self-documenting code. Comment only the
   non-obvious *why* (a workaround, a safety constraint, a surprising
   interaction), never the *what*. Keep them short, lowercase, with no trailing
@@ -252,6 +267,8 @@ async def get(self, item_id: uuid.UUID) -> ItemRead:
   reach for the session — it goes through its repository).
 - Do not add dependencies without updating `uv.lock` (`uv add <pkg>`).
 - Do not weaken mypy/Ruff config to make code pass; fix the code.
+- Do not lower the coverage threshold (`fail_under` in `pyproject.toml`).
+- Do not commit from a repository — the session dependency owns the transaction.
 - Do not add narration comments (e.g. `# increment counter`) or restate what the
   code already says — see [Minimal comments](#conventions).
 

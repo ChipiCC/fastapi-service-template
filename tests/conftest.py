@@ -24,6 +24,7 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import (
+    AsyncConnection,
     AsyncEngine,
     AsyncSession,
     async_sessionmaker,
@@ -41,6 +42,8 @@ TEST_DATABASE_URL = os.getenv(
     "postgresql+asyncpg://postgres:postgres@localhost:5432/app_test",
 )
 
+_MANAGED_TABLES_EXCLUDED = frozenset({"alembic_version"})
+
 
 def _alembic(*args: str) -> None:
     subprocess.run(
@@ -48,6 +51,15 @@ def _alembic(*args: str) -> None:
         cwd=_ROOT,
         check=True,
     )
+
+
+async def _truncate_all_tables(conn: AsyncConnection) -> None:
+    """Truncate every table (except Alembic's) so tests start from a clean slate."""
+    result = await conn.execute(text("SELECT tablename FROM pg_tables WHERE schemaname = 'public'"))
+    tables = sorted({str(row[0]) for row in result} - _MANAGED_TABLES_EXCLUDED)
+    if tables:
+        joined = ", ".join(f'"{name}"' for name in tables)
+        await conn.execute(text(f"TRUNCATE TABLE {joined} RESTART IDENTITY CASCADE"))
 
 
 @pytest.fixture(scope="session")
@@ -68,9 +80,9 @@ async def engine(database_url: str) -> AsyncIterator[AsyncEngine]:
 
 @pytest.fixture
 async def session(engine: AsyncEngine) -> AsyncIterator[AsyncSession]:
-    """A database session on a clean ``items`` table."""
+    """A database session on a clean schema (all tables truncated)."""
     async with engine.begin() as conn:
-        await conn.execute(text("TRUNCATE TABLE items"))
+        await _truncate_all_tables(conn)
     factory = async_sessionmaker(engine, expire_on_commit=False)
     async with factory() as test_session:
         yield test_session

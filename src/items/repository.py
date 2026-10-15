@@ -1,7 +1,8 @@
 """Postgres repository for items.
 
 Native, parameterized SQL — no ORM. See AGENTS.md for the SQL conventions.
-Each write commits its own transaction; reads do not.
+Repositories do not manage transactions: the session dependency commits once per
+request (see ``docs/database.md``).
 """
 
 from __future__ import annotations
@@ -28,8 +29,12 @@ _LIST_ITEMS = text(
 )
 _COUNT_ITEMS = text("SELECT count(*) FROM items")
 _GET_ITEM = text("SELECT id, name, description, created_at, updated_at FROM items WHERE id = :id")
+# clock_timestamp() (not CURRENT_TIMESTAMP) so distinct rows written inside one
+# transaction get distinct, increasing timestamps; one value feeds both columns
+# so created_at == updated_at on insert.
 _INSERT_ITEM = text(
-    "INSERT INTO items (name, description) VALUES (:name, :description) "
+    "INSERT INTO items (name, description, created_at, updated_at) "
+    "SELECT :name, :description, ts, ts FROM (SELECT clock_timestamp() AS ts) AS _ts "
     "RETURNING id, name, description, created_at, updated_at"
 )
 _DELETE_ITEM = text("DELETE FROM items WHERE id = :id RETURNING id")
@@ -64,7 +69,6 @@ class ItemRepository(BaseRepository[ItemRead, ItemCreate, ItemUpdate]):
             .mappings()
             .one()
         )
-        await self.session.commit()
         return ItemRead.model_validate(dict(row))
 
     async def update(self, entity_id: uuid.UUID, payload: ItemUpdate) -> ItemRead:
@@ -79,18 +83,16 @@ class ItemRepository(BaseRepository[ItemRead, ItemCreate, ItemUpdate]):
         # Column names come from the whitelist above; values are bound
         assignments = ", ".join(f"{column} = :{column}" for column in fields)
         statement = text(
-            f"UPDATE items SET {assignments}, updated_at = CURRENT_TIMESTAMP "  # noqa: S608
+            f"UPDATE items SET {assignments}, updated_at = clock_timestamp() "  # noqa: S608
             f"WHERE id = :id RETURNING {_COLUMNS}"
         )
         params: dict[str, Any] = {**fields, "id": entity_id}
         row = (await self.session.execute(statement, params)).mappings().one_or_none()
         if row is None:
             raise NotFoundError(f"Item {entity_id} not found")
-        await self.session.commit()
         return ItemRead.model_validate(dict(row))
 
     async def delete(self, entity_id: uuid.UUID) -> None:
         result = await self.session.execute(_DELETE_ITEM, {"id": entity_id})
         if result.mappings().one_or_none() is None:
             raise NotFoundError(f"Item {entity_id} not found")
-        await self.session.commit()
