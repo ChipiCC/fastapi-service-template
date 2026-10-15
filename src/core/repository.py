@@ -3,7 +3,8 @@
 A repository owns one entity's reads and writes. Concrete repositories
 implement this contract against a backend: Postgres via hand-written SQL in a
 domain (e.g. ``items/repository.py``), or an in-memory fake in the tests. The
-repository owns its transaction boundary — see AGENTS.md.
+transaction boundary is owned by the session dependency, not the repository —
+see ``docs/database.md``.
 
 The contract is backend-agnostic (the in-memory test double satisfies it with no
 database at all), so it lives with the other cross-cutting abstractions in
