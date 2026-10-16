@@ -1,3 +1,0 @@
-- Add base generic repository layer
-- Add items repository
-- Refactor items service to use items repository
