@@ -202,11 +202,9 @@ async def get(self, item_id: uuid.UUID) -> ItemRead:
 - **Document changes.** User-facing docs live in `docs/` (one page per topic,
   indexed by `docs/README.md`). Add new settings to `.env.example` and the table
   in `docs/configuration.md`.
-- **Minimal comments.** Write self-documenting code. Comment only the
-  non-obvious *why* (a workaround, a safety constraint, a surprising
-  interaction), never the *what*. Keep them short, lowercase, with no trailing
-  period, and match the surrounding style. Use `# --- Section ---` for section
-  headers. Lint directives (`# noqa`, `# type: ignore`) are always fine.
+- **Comments.** Keep them short, lowercase, with no trailing period, and match
+  the surrounding style. Use `# --- Section ---` for section headers. Lint
+  directives (`# noqa`, `# type: ignore`) are always fine.
 
 ## Testing
 
@@ -270,7 +268,7 @@ async def get(self, item_id: uuid.UUID) -> ItemRead:
 - Do not lower the coverage threshold (`fail_under` in `pyproject.toml`).
 - Do not commit from a repository — the session dependency owns the transaction.
 - Do not add narration comments (e.g. `# increment counter`) or restate what the
-  code already says — see [Minimal comments](#conventions).
+  code already says — see [Comments](#conventions).
 
 ## Environment
 
