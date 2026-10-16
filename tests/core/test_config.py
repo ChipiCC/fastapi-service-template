@@ -2,10 +2,59 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 from pydantic import ValidationError
 
 from core.config import Settings
+
+
+def test_dotenv_local_is_read_outside_production(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setitem(Settings.model_config, "env_file", tmp_path / ".env.local")
+    monkeypatch.delenv("ENVIRONMENT", raising=False)
+    monkeypatch.delenv("POSTGRES_HOST", raising=False)
+    (tmp_path / ".env.local").write_text("POSTGRES_HOST=from-file\n")
+
+    assert Settings().postgres_host == "from-file"
+
+
+def test_dotenv_local_missing_falls_back_to_defaults(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setitem(Settings.model_config, "env_file", tmp_path / ".env.local")
+    monkeypatch.delenv("POSTGRES_HOST", raising=False)
+
+    assert Settings().postgres_host == "localhost"
+
+
+def test_env_var_wins_over_dotenv_local(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setitem(Settings.model_config, "env_file", tmp_path / ".env.local")
+    monkeypatch.delenv("ENVIRONMENT", raising=False)
+    (tmp_path / ".env.local").write_text("POSTGRES_HOST=from-file\n")
+    monkeypatch.setenv("POSTGRES_HOST", "from-env")
+
+    assert Settings().postgres_host == "from-env"
+
+
+def test_dotenv_local_is_ignored_in_production(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setitem(Settings.model_config, "env_file", tmp_path / ".env.local")
+    (tmp_path / ".env.local").write_text("POSTGRES_HOST=from-file\n")
+    monkeypatch.setenv("ENVIRONMENT", "production")
+
+    production = Settings(
+        environment="production",
+        debug=False,
+        docs_enabled=False,
+        postgres_password="secret",
+        api_keys=["prod-key"],
+        allowed_hosts=["api.example.com"],
+    )
+    assert production.postgres_host == "localhost"
 
 
 def test_database_url_is_asyncpg() -> None:

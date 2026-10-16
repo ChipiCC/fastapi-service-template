@@ -9,7 +9,7 @@ jump straight to a topic below.
 | Topic | What it covers |
 | --- | --- |
 | [Architecture](architecture.md) | Layering (`domain → service → repository → db`), the request path, and why there is no ORM. |
-| [Configuration](configuration.md) | Every setting, env vars, `.env`, secrets, and production validation. |
+| [Configuration](configuration.md) | Every setting, source precedence, `.env.local`, secrets, and production validation. |
 | [Authentication](authentication.md) | Opt-in API-key auth, wiring new routes, and how to swap in JWT/OAuth. |
 | [CORS](cors.md) | Browser cross-origin setup and preflight behaviour. |
 | [Security](security.md) | Security headers, trusted hosts, rate limiting, and the hardening checklist. |
@@ -31,4 +31,4 @@ importantly, **all SQL is hand-written** and executed through
 
 When a change touches a documented area, update the matching page in this
 folder and, if it adds a setting, the table in
-[configuration.md](configuration.md) and `.env.example`.
+[configuration.md](configuration.md) and `.env.local.example`.

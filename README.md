@@ -70,7 +70,7 @@ see [`docs/database.md`](docs/database.md) and [`AGENTS.md`](AGENTS.md).
 ```bash
 mise install        # install Python 3.15 + uv
 mise run sync       # create .venv and install dependencies
-cp .env.example .env
+cp .env.local.example .env.local
 mise run db:up      # start Postgres (Docker Compose)
 mise run migrate    # apply migrations
 mise run dev        # http://localhost:8000/docs
@@ -132,7 +132,8 @@ see [`docs/authentication.md`](docs/authentication.md).
 ## Configuration
 
 All settings live in `src/core/config.py` and are read from environment
-variables. See [`.env.example`](.env.example) for the full list and
+variables (plus `.env.local` outside production). See
+[`.env.local.example`](.env.local.example) for the full list and
 [`docs/configuration.md`](docs/configuration.md) for reference. The app refuses
 to start with insecure defaults when `ENVIRONMENT=production`.
 

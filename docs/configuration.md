@@ -2,13 +2,30 @@
 
 All settings live in [`src/core/config.py`](../src/core/config.py) as a
 `pydantic-settings` `Settings` model. They are read from environment variables
-(optionally from a `.env` file) and validated at startup.
+and, outside production, from a `.env.local` file, then validated at startup.
 
 - Read settings through `get_settings()` (cached) — never call `os.environ`.
 - List settings (`ALLOWED_HOSTS`, `CORS_ORIGINS`, `API_KEYS`,
   `CORS_ALLOW_METHODS`, `CORS_ALLOW_HEADERS`) accept either a comma-separated
   string (`a,b,c`) or a JSON array (`["a","b"]`).
-- `.env` is gitignored; only [`.env.example`](../.env.example) ships.
+- `.env.local` is gitignored; only [`.env.local.example`](../.env.local.example)
+  ships. Copy it to `.env.local` to configure a local run.
+
+## How configuration is resolved
+
+Sources are applied in order of decreasing precedence:
+
+1. Real environment variables (`POSTGRES_HOST=x mise run dev`, or whatever the
+   platform injects) — always win, so container/CI/deploy config is never
+   shadowed by a stray file.
+2. `.env.local` in the working directory — **only when `ENVIRONMENT` is not
+   `production`**. If the file is absent it is silently skipped and the field
+   defaults below apply.
+3. Field defaults defined on `Settings`.
+
+`ENVIRONMENT=production` is detected from the **process** environment before any
+dotfile is read (a production process must never be configured by a local
+file). In production `.env.local` is not read at all.
 
 ## Settings
 

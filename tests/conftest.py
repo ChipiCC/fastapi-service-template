@@ -33,6 +33,7 @@ from sqlalchemy.ext.asyncio import (
 from sqlalchemy.pool import NullPool
 
 from app import app
+from core.config import Settings
 from db.session import get_session
 
 _ROOT = Path(__file__).resolve().parent.parent
@@ -43,6 +44,13 @@ TEST_DATABASE_URL = os.getenv(
 )
 
 _MANAGED_TABLES_EXCLUDED = frozenset({"alembic_version"})
+
+
+@pytest.fixture(autouse=True)
+def _isolate_settings(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Decouple the suite from a developer's local `.env.local`."""
+    monkeypatch.delenv("ENVIRONMENT", raising=False)
+    monkeypatch.setitem(Settings.model_config, "env_file", ".env.local.pytest-absent")
 
 
 def _alembic(*args: str) -> None:

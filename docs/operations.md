@@ -5,7 +5,7 @@
 ```bash
 mise install         # Python 3.15 + uv
 mise run sync        # create .venv, install dependencies
-cp .env.example .env
+cp .env.local.example .env.local
 mise run db:up       # start Postgres
 mise run migrate     # apply migrations
 mise run dev         # http://localhost:8000/docs

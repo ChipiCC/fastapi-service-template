@@ -24,7 +24,7 @@ structlog, Ruff, mypy, pytest, uv, mise.
 ```bash
 mise install        # provisions Python 3.15 + uv
 mise run sync       # creates .venv and installs all dependency groups
-cp .env.example .env
+cp .env.local.example .env.local
 ```
 
 Never assume a globally installed `uv`/`python`; always go through `mise run …`
@@ -200,13 +200,11 @@ async def get(self, item_id: uuid.UUID) -> ItemRead:
   Protect a public router with `dependencies=[Depends(require_api_key)]` rather
   than hand-rolling checks in handlers.
 - **Document changes.** User-facing docs live in `docs/` (one page per topic,
-  indexed by `docs/README.md`). Add new settings to `.env.example` and the table
-  in `docs/configuration.md`.
-- **Minimal comments.** Write self-documenting code. Comment only the
-  non-obvious *why* (a workaround, a safety constraint, a surprising
-  interaction), never the *what*. Keep them short, lowercase, with no trailing
-  period, and match the surrounding style. Use `# --- Section ---` for section
-  headers. Lint directives (`# noqa`, `# type: ignore`) are always fine.
+  indexed by `docs/README.md`). Add new settings to `.env.local.example` and the
+  table in `docs/configuration.md`.
+- **Comments.** Keep them short, lowercase, with no trailing period, and match
+  the surrounding style. Use `# --- Section ---` for section headers. Lint
+  directives (`# noqa`, `# type: ignore`) are always fine.
 
 ## Testing
 
@@ -253,9 +251,12 @@ async def get(self, item_id: uuid.UUID) -> ItemRead:
 ## Configuration & secrets
 
 - Add new settings to `Settings` in `core/config.py` with a sane default, and
-  document them in `.env.example`.
+  document them in `.env.local.example`.
 - Read settings via `get_settings()` (cached); never call `os.environ` directly.
-- **Never commit real secrets.** `.env` is gitignored; only `.env.example` ships.
+  The single exception is the production check in `core/config.py`, which must
+  run before any dotfile is read.
+- **Never commit real secrets.** `.env.local` is gitignored; only
+  `.env.local.example` ships. Production reads real env vars only — no dotfile.
 
 ## Do not
 
@@ -270,7 +271,7 @@ async def get(self, item_id: uuid.UUID) -> ItemRead:
 - Do not lower the coverage threshold (`fail_under` in `pyproject.toml`).
 - Do not commit from a repository — the session dependency owns the transaction.
 - Do not add narration comments (e.g. `# increment counter`) or restate what the
-  code already says — see [Minimal comments](#conventions).
+  code already says — see [Comments](#conventions).
 
 ## Environment
 

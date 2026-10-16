@@ -1,6 +1,9 @@
 """Application configuration.
 
-Settings are read from environment variables (optionally from a `.env` file).
+Settings are read from environment variables and, outside production, from a
+`.env.local` file in the working directory (missing files are ignored). Real
+environment variables always take precedence over the file, and the file takes
+precedence over the field defaults. In production no dotfile is read at all.
 Nested values can be provided with a double underscore, e.g. `POSTGRES__HOST`.
 List-valued settings (`ALLOWED_HOSTS`, `CORS_ORIGINS`, `API_KEYS`) accept either
 a comma-separated string or a JSON array.
@@ -9,12 +12,35 @@ a comma-separated string or a JSON array.
 from __future__ import annotations
 
 import json
+import os
 from functools import lru_cache
 from typing import Annotated, Any, Literal
 from urllib.parse import quote
 
 from pydantic import AliasChoices, Field, computed_field, field_validator, model_validator
-from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
+from pydantic_settings import (
+    BaseSettings,
+    NoDecode,
+    PydanticBaseSettingsSource,
+    SettingsConfigDict,
+)
+
+DOTENV_FILE = ".env.local"
+"""Local settings file: read outside production, ignored when it does not exist."""
+
+
+def _is_production_process() -> bool:
+    """Whether this process runs in production, decided before sources are built.
+
+    The dotenv file cannot be consulted here (that is the decision being made),
+    so only the real process environment is inspected. In production the
+    environment identifier is always injected by the platform.
+    """
+    return any(
+        key.upper() == "ENVIRONMENT" and value.strip().lower() == "production"
+        for key, value in os.environ.items()
+    )
+
 
 Environment = Literal["local", "staging", "production"]
 SslMode = Literal["disable", "allow", "prefer", "require", "verify-ca", "verify-full"]
@@ -28,13 +54,33 @@ class Settings(BaseSettings):
     """Strongly-typed application settings."""
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=DOTENV_FILE,
         env_file_encoding="utf-8",
         env_nested_delimiter="__",
         extra="ignore",
         case_sensitive=False,
         populate_by_name=True,
     )
+
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls: type[BaseSettings],
+        init_settings: PydanticBaseSettingsSource,
+        env_settings: PydanticBaseSettingsSource,
+        dotenv_settings: PydanticBaseSettingsSource,
+        file_secret_settings: PydanticBaseSettingsSource,
+    ) -> tuple[PydanticBaseSettingsSource, ...]:
+        """Order the sources: init arguments, env vars, then `.env.local`.
+
+        The dotenv source is dropped in production so deployments configure
+        everything through real environment variables (or mounted secrets).
+        """
+        sources: list[PydanticBaseSettingsSource] = [init_settings, env_settings]
+        if not _is_production_process():
+            sources.append(dotenv_settings)
+        sources.append(file_secret_settings)
+        return tuple(sources)
 
     # --- Application ---
     app_name: str = "FastAPI Service"
